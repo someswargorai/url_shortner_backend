@@ -43,12 +43,12 @@ app.get("/get-url/:shortUrl", async(req, res) => {
         // find from DB
         const url = await modelSchema.findOne({ shortUrl: decodedUrl });
         if(url !== null){
-            return res.status(301).send({url:url.longUrl, success:true})
+            return res.status(301).redirect(url.longUrl)
         }else{
             return res.status(200).send({message:"No Such Url present in our system"})
         } 
     }else{
-         return res.status(301).send({url:isPresentOrNot, success:true})
+         return res.status(301).redirect(isPresentOrNot)
     }
   } catch (err) {
      return res.status(500).send({message:"We’re experiencing technical difficulties. Please retry after some time."})
@@ -87,7 +87,7 @@ app.post("/url-short", async (req, res) => {
       uniqueId,
     );
 
-    const constructShortUrl = `${process.env.frontend_url}/${shortBasesixtwocodeOutput}`;
+    const constructShortUrl = shortBasesixtwocodeOutput;
     await redis.set(url, constructShortUrl, "EX", 86400);
     await redis.set(constructShortUrl, url, "EX", 86400);
     const result = await modelSchema.updateOne(
