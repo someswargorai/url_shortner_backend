@@ -6,6 +6,8 @@ const mongo = require("./config/mongo.config");
 const modelSchema = require("./model.schema");
 const { model } = require("mongoose");
 const shortBasesixtwocode = require("./utils/Base-six-two-converter.utils");
+const userRouter = require("./route/user.router");
+const urlRouter = require("./route/url.router");
 
 app.use(express.json());
 
@@ -109,6 +111,9 @@ app.post("/url-short", async (req, res) => {
     return res.status(500).send({ message: "We’re experiencing technical difficulties. Please retry after some time." });
   }
 });
+
+app.use("/auth", userRouter);
+app.use("/url", urlRouter)
 
 app.listen(3001, () => {
   console.log("URL shortner is listening on 3001 port");
