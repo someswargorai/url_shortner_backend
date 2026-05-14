@@ -8,6 +8,10 @@ const { model } = require("mongoose");
 const shortBasesixtwocode = require("./utils/Base-six-two-converter.utils");
 const userRouter = require("./route/user.router");
 const urlRouter = require("./route/url.router");
+const { userAuth } = require("./middleware/userAuth.middleware");
+const { userAuthforGetUrl } = require("./middleware/userAuthforGetUrl.middleware");
+const UAParser = require("ua-parser-js");
+const geoip = require("geoip-lite");
 
 app.use(express.json());
 
@@ -34,26 +38,81 @@ app.get("/", (req, res) => {
   res.status(200).send("Hello from URL shortner");
 });
 
-app.get("/get-url/:shortUrl", async(req, res) => {
+app.get("/get-url/:shortUrl", userAuthforGetUrl, async (req, res) => {
   try {
     const { shortUrl } = req.params;
+
+    // get the details of the user agent
+    const ua = req.headers['user-agent'];
+    const parsed = UAParser(ua);
+
+    const referrer = req.headers.referer || "Direct";
+
+    console.log("parsed", parsed);
+
+    const deviceType = parsed.device.type;
+    const browserName = parsed.browser.name;
+    const osName = parsed.os.name;
+
+    const ip = req.ip;
+
+    const geo = geoip.lookup(ip);
+
+
     // first check from redis
     const decodedUrl = decodeURIComponent(shortUrl);
     const isPresentOrNot = await redis.get(decodedUrl);
     // if not present in the cache
-    if(isPresentOrNot === null){
-        // find from DB
-        const url = await modelSchema.findOne({ shortUrl: decodedUrl });
-        if(url !== null){
-            return res.status(301).redirect(url.longUrl)
-        }else{
-            return res.status(200).send({message:"No Such Url present in our system"})
-        } 
-    }else{
-         return res.status(301).redirect(isPresentOrNot)
+    if (isPresentOrNot === null) {
+      // find from DB
+      const url = await modelSchema.findOne({ shortUrl: decodedUrl });
+      if (url !== null) {
+        // update the count of the url
+        await modelSchema.updateOne(
+          {
+            shortUrl: decodedUrl
+          },
+          {
+            $inc: {
+              count: 1
+            },
+            $push: {
+              userIps: ip,
+              location: `${geo?.city}, ${geo?.region}, ${geo?.country}`,
+              devices: deviceType,
+              browsers: browserName,
+              os: `${osName}-${parsed?.os?.version}`,
+              referrer: referrer,
+            }
+          }
+        )
+        return res.status(301).redirect(url.longUrl)
+      } else {
+        return res.status(200).send({ message: "No Such Url present in our system" })
+      }
+    } else {
+      await modelSchema.updateOne(
+        {
+          shortUrl: decodedUrl
+        },
+        {
+          $inc: {
+            count: 1
+          },
+          $push: {
+            userIps: ip,
+            location: `${geo?.city}, ${geo?.region}, ${geo?.country}`,
+            devices: deviceType,
+            browsers: browserName,
+            os: `${osName}-${parsed?.os?.version}`,
+            referrer: referrer,
+          }
+        }
+      )
+      return res.status(301).redirect(isPresentOrNot)
     }
   } catch (err) {
-     return res.status(500).send({message:"We’re experiencing technical difficulties. Please retry after some time."})
+    return res.status(500).send({ message: "We’re experiencing technical difficulties. Please retry after some time." })
   }
 });
 

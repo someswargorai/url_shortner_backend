@@ -19,13 +19,29 @@ const schema = mongoose.Schema({
     type: String,
     default: null,
   },
-  location:{
-    type: String,
-    default: ""
+  userIps:{
+    type: Array,
+    default: []
   },
-  device:{
-    type: String,
-    default: ""
+  location:{
+    type: Array,
+    default: []
+  },
+  devices:{
+    type: Array,
+    default: []
+  },
+  browsers:{
+    type: Array,
+    default: []
+  },
+  os:{
+    type: Array,
+    default: []
+  },
+  referrer: {
+    type: Array,
+    default: []
   },
   createdAt: {
     type: Date,
