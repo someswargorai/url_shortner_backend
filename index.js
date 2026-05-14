@@ -11,7 +11,7 @@ const urlRouter = require("./route/url.router");
 const { userAuth } = require("./middleware/userAuth.middleware");
 const { userAuthforGetUrl } = require("./middleware/userAuthforGetUrl.middleware");
 const UAParser = require("ua-parser-js");
-const geoip = require("geoip-lite");
+const axios = require("axios");
 
 app.use(express.json());
 
@@ -54,9 +54,18 @@ app.get("/get-url/:shortUrl", userAuthforGetUrl, async (req, res) => {
     const browserName = parsed.browser.name;
     const osName = parsed.os.name;
 
-    const ip = req.ip;
+    const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress || req.ip;
+    const lookupIp = (ip === "::1" || ip === "127.0.0.1") ? "8.8.8.8" : ip;
+    let locationStr = "Unknown Location";
 
-    const geo = geoip.lookup(ip);
+    try {
+      const geoResponse = await axios.get(`http://ip-api.com/json/${lookupIp}`);
+      if (geoResponse.data.status === "success") {
+        locationStr = `${geoResponse.data.city}, ${geoResponse.data.regionName}, ${geoResponse.data.country}`;
+      }
+    } catch (e) {
+      console.log("Geo error", e.message);
+    }
 
 
     // first check from redis
@@ -78,7 +87,7 @@ app.get("/get-url/:shortUrl", userAuthforGetUrl, async (req, res) => {
             },
             $push: {
               userIps: ip,
-              location: `${geo?.city}, ${geo?.region}, ${geo?.country}`,
+              location: locationStr,
               devices: deviceType,
               browsers: browserName,
               os: `${osName}-${parsed?.os?.version}`,
@@ -101,7 +110,7 @@ app.get("/get-url/:shortUrl", userAuthforGetUrl, async (req, res) => {
           },
           $push: {
             userIps: ip,
-            location: `${geo?.city}, ${geo?.region}, ${geo?.country}`,
+            location: locationStr,
             devices: deviceType,
             browsers: browserName,
             os: `${osName}-${parsed?.os?.version}`,
