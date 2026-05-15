@@ -82,9 +82,7 @@ app.get("/get-url/:shortUrl", userAuthforGetUrl, async (req, res) => {
             shortUrl: decodedUrl
           },
           {
-            $inc: {
-              count: 1
-            },
+
             $push: {
               userIps: ip,
               location: locationStr,
@@ -92,6 +90,9 @@ app.get("/get-url/:shortUrl", userAuthforGetUrl, async (req, res) => {
               browsers: browserName,
               os: `${osName}-${parsed?.os?.version}`,
               referrer: referrer,
+              countGraph: {
+                  count: 1
+              },
             }
           }
         )
@@ -105,9 +106,7 @@ app.get("/get-url/:shortUrl", userAuthforGetUrl, async (req, res) => {
           shortUrl: decodedUrl
         },
         {
-          $inc: {
-            count: 1
-          },
+
           $push: {
             userIps: ip,
             location: locationStr,
@@ -115,6 +114,9 @@ app.get("/get-url/:shortUrl", userAuthforGetUrl, async (req, res) => {
             browsers: browserName,
             os: `${osName}-${parsed?.os?.version}`,
             referrer: referrer,
+            countGraph: {
+              count: 1
+            },
           }
         }
       )

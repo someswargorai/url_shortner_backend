@@ -7,35 +7,43 @@ const schema = mongoose.Schema({
   longUrl: {
     type: String,
   },
-  userId:{
+  userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "user"
   },
-  count:{
-    type: Number,
-    default: 0,
-  },
+  countGraph: [
+    {
+      timestamp: {
+        type: Date,
+        default: Date.now
+      },
+      count: {
+        type: Number,
+        default: 0
+      }
+    }
+  ],
   customUrl: {
     type: String,
     default: null,
   },
-  userIps:{
+  userIps: {
     type: Array,
     default: []
   },
-  location:{
+  location: {
     type: Array,
     default: []
   },
-  devices:{
+  devices: {
     type: Array,
     default: []
   },
-  browsers:{
+  browsers: {
     type: Array,
     default: []
   },
-  os:{
+  os: {
     type: Array,
     default: []
   },
@@ -57,6 +65,6 @@ const schema = mongoose.Schema({
   },
 });
 
-schema.index({longUrl: 1})
+schema.index({ longUrl: 1 })
 
 module.exports = mongoose.model("url", schema);
