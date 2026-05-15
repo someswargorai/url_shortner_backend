@@ -11,6 +11,10 @@ const schema = mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "user"
   },
+  guestId: {
+    type: String,
+    default: null
+  },
   countGraph: [
     {
       timestamp: {
@@ -61,7 +65,6 @@ const schema = mongoose.Schema({
   },
   seqId: {
     type: Number,
-    default: new Date(),
   },
 });
 

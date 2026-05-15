@@ -10,19 +10,22 @@ const urlShortController = async (req, res) => {
         }
 
         let uniqueId;
-        const getTheCacheUrl = await redis.get(url);
+        const cacheKey = `url:${req.user.id}:${url}`;
+        const getTheCacheUrl = await redis.get(cacheKey);
 
         if (getTheCacheUrl === null) {
-            const findURL = await modelSchema.findOne({ longUrl: url });
+            const findURL = await modelSchema.findOne({ longUrl: url, userId: req.user.id });
 
-            if (findURL !== null) {
+            if (findURL) {
                 return res.status(200).send({ url: findURL.shortUrl });
             } else {
+                uniqueId = await redis.incr("url_sequence");
                 const newUrl = new modelSchema({
                     longUrl: url,
+                    userId: req.user.id,
+                    seqId: uniqueId
                 });
-                uniqueId = newUrl.seqId;
-                newUrl.save();
+                await newUrl.save();
             }
         } else {
             return res
@@ -35,21 +38,19 @@ const urlShortController = async (req, res) => {
         );
 
         const constructShortUrl = shortBasesixtwocodeOutput;
-        await redis.set(url, constructShortUrl, "EX", 86400);
+        await redis.set(cacheKey, constructShortUrl, "EX", 86400);
         await redis.set(constructShortUrl, url, "EX", 86400);
-        const result = await modelSchema.updateOne(
+        
+        await modelSchema.updateOne(
             {
                 longUrl: url,
+                userId: req.user.id
             },
             {
                 $set: {
                     shortUrl: constructShortUrl,
-                    userId: req.user.id,
                 },
-            },
-            {
-                new: true,
-            },
+            }
         );
 
         return res.status(200).send({ url: constructShortUrl });

@@ -134,20 +134,24 @@ app.post("/url-short", async (req, res) => {
       return res.status(200).send("No Url has given to short");
     }
 
+    const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress || req.ip;
+    const cacheKey = `guest:${ip}:${url}`;
     let uniqueId;
-    const getTheCacheUrl = await redis.get(url);
+    const getTheCacheUrl = await redis.get(cacheKey);
 
     if (getTheCacheUrl === null) {
-      const findURL = await modelSchema.findOne({ longUrl: url });
+      const findURL = await modelSchema.findOne({ longUrl: url, guestId: ip });
 
       if (findURL !== null) {
         return res.status(200).send({ url: findURL.shortUrl });
       } else {
+        uniqueId = await redis.incr("url_sequence");
         const newUrl = new modelSchema({
           longUrl: url,
+          guestId: ip,
+          seqId: uniqueId
         });
-        uniqueId = newUrl.seqId;
-        newUrl.save();
+        await newUrl.save();
       }
     } else {
       return res
@@ -160,20 +164,18 @@ app.post("/url-short", async (req, res) => {
     );
 
     const constructShortUrl = shortBasesixtwocodeOutput;
-    await redis.set(url, constructShortUrl, "EX", 86400);
+    await redis.set(cacheKey, constructShortUrl, "EX", 86400);
     await redis.set(constructShortUrl, url, "EX", 86400);
-    const result = await modelSchema.updateOne(
+    await modelSchema.updateOne(
       {
         longUrl: url,
+        guestId: ip
       },
       {
         $set: {
           shortUrl: constructShortUrl,
         },
-      },
-      {
-        new: true,
-      },
+      }
     );
 
     return res.status(200).send({ url: constructShortUrl });
