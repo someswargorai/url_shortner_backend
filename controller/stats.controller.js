@@ -7,7 +7,7 @@ const getUrlStatsController = async (req, res) => {
         const clickStateWithMinutes = await modelSchema.aggregate([
             {
                 $match: {
-                    shortUrl: new mongoose.Types.ObjectId(urlId),
+                    _id: new mongoose.Types.ObjectId(urlId),
                     userId: new mongoose.Types.ObjectId(req.user.id)
                 } 
             },
@@ -34,7 +34,7 @@ const getUrlStatsController = async (req, res) => {
             }
         ]);
 
-        const urlStats = await modelSchema.findOne({ shortUrl: urlId, userId: req.user.id });
+        const urlStats = await modelSchema.findOne({ _id: new mongoose.Types.ObjectId(urlId), userId: new mongoose.Types.ObjectId(req.user.id) });
 
         if (!urlStats) {
             return res.status(404).send({ message: "URL not found" });
