@@ -48,11 +48,11 @@ app.get("/get-url/:shortUrl", userAuthforGetUrl, async (req, res) => {
 
     const referrer = req.headers.referer || "Direct";
 
-    console.log("parsed", parsed);
-
-    const deviceType = parsed.device.type;
-    const browserName = parsed.browser.name;
-    const osName = parsed.os.name;
+    const deviceType = parsed.device.type || "Desktop";
+    const browserName = parsed.browser.name || "Unknown Browser";
+    const osName = parsed.os.name || "Unknown OS";
+    const osVersion = parsed.os.version || "";
+    const fullOs = osName === "Unknown OS" ? "Unknown" : `${osName} ${osVersion}`.trim();
 
     const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress || req.ip;
     const lookupIp = (ip === "::1" || ip === "127.0.0.1") ? "8.8.8.8" : ip;
@@ -88,7 +88,7 @@ app.get("/get-url/:shortUrl", userAuthforGetUrl, async (req, res) => {
               location: locationStr,
               devices: deviceType,
               browsers: browserName,
-              os: `${osName}-${parsed?.os?.version}`,
+              os: fullOs,
               referrer: referrer,
               countGraph: {
                   count: 1
@@ -112,7 +112,7 @@ app.get("/get-url/:shortUrl", userAuthforGetUrl, async (req, res) => {
             location: locationStr,
             devices: deviceType,
             browsers: browserName,
-            os: `${osName}-${parsed?.os?.version}`,
+            os: fullOs,
             referrer: referrer,
             countGraph: {
               count: 1
