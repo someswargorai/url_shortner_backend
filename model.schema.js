@@ -4,6 +4,10 @@ const schema = mongoose.Schema({
   shortUrl: {
     type: String,
   },
+  private: {
+    type: Boolean,
+    default: false,
+  },
   longUrl: {
     type: String,
   },

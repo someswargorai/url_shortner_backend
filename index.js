@@ -4,11 +4,10 @@ const app = express();
 const redis = require("./config/redis.config");
 const mongo = require("./config/mongo.config");
 const modelSchema = require("./model.schema");
-const { model } = require("mongoose");
 const shortBasesixtwocode = require("./utils/Base-six-two-converter.utils");
 const userRouter = require("./route/user.router");
 const urlRouter = require("./route/url.router");
-const { userAuth } = require("./middleware/userAuth.middleware");
+const shortUrlSdkRouter = require("./route/shortUrlSdkRouter");
 const { userAuthforGetUrl } = require("./middleware/userAuthforGetUrl.middleware");
 const UAParser = require("ua-parser-js");
 const axios = require("axios");
@@ -18,7 +17,7 @@ app.use(express.json());
 app.use(
   cors({
     origin: "*",
-    methods: ["GET", "POST"],
+    methods: ["GET", "POST", "DELETE", "PUT", "PATCH"],
   }),
 );
 
@@ -75,9 +74,20 @@ app.get("/get-url/:shortUrl", userAuthforGetUrl, async (req, res) => {
     if (isPresentOrNot === null) {
       // find from DB
       const url = await modelSchema.findOne({ shortUrl: decodedUrl });
-      if (url !== null) {
-        // update the count of the url
-        await modelSchema.updateOne(
+
+      if (!url) {
+        return res.status(200).send({ message: "No Such Url present in our system" })
+      }
+
+      if (url.private) {
+        return res.status(200).send({ message: "No Such Url present in our system" })
+      }
+
+      // Add back to redis for future requests
+      await redis.set(decodedUrl, url.longUrl, "EX", 86400);
+
+      // update the count of the url
+      await modelSchema.updateOne(
           {
             shortUrl: decodedUrl
           },
@@ -97,9 +107,7 @@ app.get("/get-url/:shortUrl", userAuthforGetUrl, async (req, res) => {
           }
         )
         return res.status(301).redirect(url.longUrl)
-      } else {
-        return res.status(200).send({ message: "No Such Url present in our system" })
-      }
+
     } else {
       await modelSchema.updateOne(
         {
@@ -184,8 +192,12 @@ app.post("/url-short", async (req, res) => {
   }
 });
 
+const apikeyRouter = require("./route/apikey.router");
+
 app.use("/auth", userRouter);
-app.use("/url", urlRouter)
+app.use("/url", urlRouter);
+app.use("/api/v1", shortUrlSdkRouter);
+app.use("/apikey", apikeyRouter);
 
 app.listen(3001, () => {
   console.log("URL shortner is listening on 3001 port");

@@ -1,8 +1,10 @@
-const modelSchema = require("../model.schema");
 const redis = require("../config/redis.config");
+const modelSchema = require("../model.schema");
+const userSchema = require("../model/user.schema");
 const shortBasesixtwocode = require("../utils/Base-six-two-converter.utils");
 
-const urlShortController = async (req, res) => {
+
+const urlShortSdkController = async (req, res) => {
     try {
         const { url } = req.body;
         if (!url) {
@@ -40,8 +42,8 @@ const urlShortController = async (req, res) => {
         const constructShortUrl = shortBasesixtwocodeOutput;
         await redis.set(cacheKey, constructShortUrl, "EX", 86400);
         await redis.set(constructShortUrl, url, "EX", 86400);
-        
-        await modelSchema.updateOne( 
+
+        await modelSchema.updateOne(
             {
                 longUrl: url,
                 userId: req.user.id
@@ -53,12 +55,12 @@ const urlShortController = async (req, res) => {
             }
         );
 
-        return res.status(200).send({ url: constructShortUrl });
+        return res.status(200).send({ url: `${process.env.frontend_url}/${constructShortUrl}` });
     } catch (err) {
         return res.status(500).send({ message: "We’re experiencing technical difficulties. Please retry after some time." });
     }
 }
 
 module.exports = {
-    urlShortController,
+    urlShortSdkController,
 }
