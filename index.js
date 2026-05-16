@@ -4,6 +4,7 @@ const app = express();
 const redis = require("./config/redis.config");
 const mongo = require("./config/mongo.config");
 const modelSchema = require("./model.schema");
+const clickSchema = require("./model/click.schema");
 const shortBasesixtwocode = require("./utils/Base-six-two-converter.utils");
 const userRouter = require("./route/user.router");
 const urlRouter = require("./route/url.router");
@@ -106,9 +107,28 @@ app.get("/get-url/:shortUrl", userAuthforGetUrl, async (req, res) => {
             }
           }
         )
+        
+        const newClick = new clickSchema({
+          urlId: url._id,
+          campaignId: url.campaignId,
+          ip: ip,
+          location: locationStr,
+          device: deviceType,
+          browser: browserName,
+          os: fullOs,
+          referrer: referrer
+        });
+        await newClick.save();
+
         return res.status(301).redirect(url.longUrl)
 
     } else {
+      const url = await modelSchema.findOne({ shortUrl: decodedUrl });
+
+      if (url && url.private) {
+        return res.status(200).send({ message: "No Such Url present in our system" })
+      }
+
       await modelSchema.updateOne(
         {
           shortUrl: decodedUrl
@@ -128,6 +148,21 @@ app.get("/get-url/:shortUrl", userAuthforGetUrl, async (req, res) => {
           }
         }
       )
+      
+      if (url) {
+        const newClick = new clickSchema({
+          urlId: url._id,
+          campaignId: url.campaignId,
+          ip: ip,
+          location: locationStr,
+          device: deviceType,
+          browser: browserName,
+          os: fullOs,
+          referrer: referrer
+        });
+        await newClick.save();
+      }
+
       return res.status(301).redirect(isPresentOrNot)
     }
   } catch (err) {
@@ -193,11 +228,13 @@ app.post("/url-short", async (req, res) => {
 });
 
 const apikeyRouter = require("./route/apikey.router");
+const campaignRouter = require("./route/campaign.router");
 
 app.use("/auth", userRouter);
 app.use("/url", urlRouter);
 app.use("/api/v1", shortUrlSdkRouter);
 app.use("/apikey", apikeyRouter);
+app.use("/campaign", campaignRouter);
 
 app.listen(3001, () => {
   console.log("URL shortner is listening on 3001 port");

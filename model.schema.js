@@ -15,6 +15,10 @@ const schema = mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "user"
   },
+  campaignId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "campaign"
+  },
   guestId: {
     type: String,
     default: null

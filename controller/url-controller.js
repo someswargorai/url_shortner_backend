@@ -1,20 +1,37 @@
 const modelSchema = require("../model.schema");
+const campaignSchema = require("../model/campaign.schema");
 const redis = require("../config/redis.config");
 const shortBasesixtwocode = require("../utils/Base-six-two-converter.utils");
 
 const urlShortController = async (req, res) => {
     try {
-        const { url } = req.body;
+        const { url, campaignId } = req.body;
         if (!url) {
             return res.status(200).send("No Url has given to short");
         }
 
+        let actualCampaignId = campaignId;
+        if (!actualCampaignId) {
+            let defaultCampaign = await campaignSchema.findOne({ userId: req.user.id, isDefault: true });
+            if (!defaultCampaign) {
+                defaultCampaign = new campaignSchema({
+                    name: "Default Campaign",
+                    description: "Auto-generated default campaign",
+                    userId: req.user.id,
+                    isDefault: true
+                });
+                await defaultCampaign.save();
+            }
+            actualCampaignId = defaultCampaign._id;
+        }
+
         let uniqueId;
-        const cacheKey = `url:${req.user.id}:${url}`;
+        // Include campaignId in cacheKey so that we don't return a cached URL from a different campaign
+        const cacheKey = `url:${req.user.id}:${url}:${actualCampaignId}`;
         const getTheCacheUrl = await redis.get(cacheKey);
 
         if (getTheCacheUrl === null) {
-            const findURL = await modelSchema.findOne({ longUrl: url, userId: req.user.id });
+            const findURL = await modelSchema.findOne({ longUrl: url, userId: req.user.id, campaignId: actualCampaignId });
 
             if (findURL) {
                 return res.status(200).send({ url: findURL.shortUrl });
@@ -23,6 +40,7 @@ const urlShortController = async (req, res) => {
                 const newUrl = new modelSchema({
                     longUrl: url,
                     userId: req.user.id,
+                    campaignId: actualCampaignId,
                     seqId: uniqueId
                 });
                 await newUrl.save();
@@ -44,7 +62,8 @@ const urlShortController = async (req, res) => {
         await modelSchema.updateOne( 
             {
                 longUrl: url,
-                userId: req.user.id
+                userId: req.user.id,
+                campaignId: actualCampaignId
             },
             {
                 $set: {

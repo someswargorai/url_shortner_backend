@@ -6,7 +6,7 @@ const { getUrlAnalyticsController } = require("../controller/url-analytics.contr
 const { getUrlStatsController } = require("../controller/stats.controller.js");
 const { getUrlAiInsightsController } = require("../controller/geturl-ai-insights.controller.js");
 const { updateUrlController } = require("../controller/update-url.controller.js");
-
+const { aiChatController } = require("../controller/ai-chat.controller.js");
 
 const router = express.Router();
 
@@ -15,5 +15,6 @@ router.get("/analytics", userAuth, getUrlAnalyticsController);
 router.get("/stats/:urlId", userAuth, getUrlStatsController);
 router.get("/ai-insights/:urlId", userAuth, getUrlAiInsightsController);
 router.patch("/update-url/:urlId", userAuth, updateUrlController);
+router.post("/ai-chat", userAuth, aiChatController);
 
 module.exports = router;
