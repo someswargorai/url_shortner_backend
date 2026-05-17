@@ -229,12 +229,16 @@ app.post("/url-short", async (req, res) => {
 
 const apikeyRouter = require("./route/apikey.router");
 const campaignRouter = require("./route/campaign.router");
+const projectRouter = require("./route/project.router");
+const eventRouter = require("./route/event.router");
 
 app.use("/auth", userRouter);
 app.use("/url", urlRouter);
 app.use("/api/v1", shortUrlSdkRouter);
 app.use("/apikey", apikeyRouter);
 app.use("/campaign", campaignRouter);
+app.use("/project", projectRouter);
+app.use("/event", eventRouter);
 
 app.listen(3001, () => {
   console.log("URL shortner is listening on 3001 port");
