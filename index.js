@@ -70,11 +70,31 @@ app.get("/get-url/:shortUrl", userAuthforGetUrl, async (req, res) => {
 
     // first check from redis
     const decodedUrl = decodeURIComponent(shortUrl);
-    const isPresentOrNot = await redis.get(decodedUrl);
+    
+    // Check if custom domain was passed in query
+    const requestDomain = req.query.domain;
+    let cleanDomain = "";
+    if (requestDomain) {
+      cleanDomain = requestDomain.replace(/^(https?:\/\/)?(www\.)?/, "").replace(/\/$/, "").toLowerCase();
+    }
+    
+    const cacheKey = cleanDomain ? `${cleanDomain}:${decodedUrl}` : decodedUrl;
+    const isPresentOrNot = await redis.get(cacheKey);
+
     // if not present in the cache
     if (isPresentOrNot === null) {
+      let query = { shortUrl: decodedUrl };
+      
+      if (cleanDomain) {
+        const Domain = require("./model/domain.schema");
+        const domainRecord = await Domain.findOne({ domain: cleanDomain, isValid: true });
+        if (domainRecord) {
+          query.userId = domainRecord.userId;
+        }
+      }
+
       // find from DB
-      const url = await modelSchema.findOne({ shortUrl: decodedUrl });
+      const url = await modelSchema.findOne(query);
 
       if (!url) {
         return res.status(200).send({ message: "No Such Url present in our system" })
@@ -85,12 +105,12 @@ app.get("/get-url/:shortUrl", userAuthforGetUrl, async (req, res) => {
       }
 
       // Add back to redis for future requests
-      await redis.set(decodedUrl, url.longUrl, "EX", 86400);
+      await redis.set(cacheKey, url.longUrl, "EX", 86400);
 
       // update the count of the url
       await modelSchema.updateOne(
           {
-            shortUrl: decodedUrl
+            _id: url._id
           },
           {
 
@@ -123,33 +143,43 @@ app.get("/get-url/:shortUrl", userAuthforGetUrl, async (req, res) => {
         return res.status(301).redirect(url.longUrl)
 
     } else {
-      const url = await modelSchema.findOne({ shortUrl: decodedUrl });
+      let query = { shortUrl: decodedUrl };
+      
+      if (cleanDomain) {
+        const Domain = require("./model/domain.schema");
+        const domainRecord = await Domain.findOne({ domain: cleanDomain, isValid: true });
+        if (domainRecord) {
+          query.userId = domainRecord.userId;
+        }
+      }
+
+      const url = await modelSchema.findOne(query);
 
       if (url && url.private) {
         return res.status(200).send({ message: "No Such Url present in our system" })
       }
 
-      await modelSchema.updateOne(
-        {
-          shortUrl: decodedUrl
-        },
-        {
-
-          $push: {
-            userIps: ip,
-            location: locationStr,
-            devices: deviceType,
-            browsers: browserName,
-            os: fullOs,
-            referrer: referrer,
-            countGraph: {
-              count: 1
-            },
-          }
-        }
-      )
-      
       if (url) {
+        await modelSchema.updateOne(
+          {
+            _id: url._id
+          },
+          {
+
+            $push: {
+              userIps: ip,
+              location: locationStr,
+              devices: deviceType,
+              browsers: browserName,
+              os: fullOs,
+              referrer: referrer,
+              countGraph: {
+                count: 1
+              },
+            }
+          }
+        )
+        
         const newClick = new clickSchema({
           urlId: url._id,
           campaignId: url.campaignId,
@@ -231,6 +261,7 @@ const apikeyRouter = require("./route/apikey.router");
 const campaignRouter = require("./route/campaign.router");
 const projectRouter = require("./route/project.router");
 const eventRouter = require("./route/event.router");
+const domainRouter = require("./route/domain.router");
 
 app.use("/auth", userRouter);
 app.use("/url", urlRouter);
@@ -239,6 +270,7 @@ app.use("/apikey", apikeyRouter);
 app.use("/campaign", campaignRouter);
 app.use("/project", projectRouter);
 app.use("/event", eventRouter);
+app.use("/domain", domainRouter);
 
 app.listen(3001, () => {
   console.log("URL shortner is listening on 3001 port");

@@ -18,6 +18,10 @@ const schema = mongoose.Schema({
       plan: { type: String, default: "Base" },
     }
   ],
+  domain: {
+    type: String,
+    default: null,
+  },
 }, {
   timestamps: true,
 });
