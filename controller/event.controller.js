@@ -1,4 +1,4 @@
-const Event = require("../model/event.schema");
+  const Event = require("../model/event.schema");
 const Project = require("../model/project.schema");
 const UAParser = require("ua-parser-js");
 const axios = require("axios");
@@ -467,8 +467,6 @@ User Question: ${query}
 Provide a helpful, analytical answer. Use markdown for formatting. If the answer cannot be determined from the context, state that clearly but offer any related insights if possible. Keep it concise.`;
 
         const result = await model.generateContent(prompt);
-        const aiResponse = result.response.text();
-
         return res.status(200).json({ success: true, aiResponse });
     } catch (error) {
         console.error("Error in AI Chat:", error);
@@ -476,9 +474,130 @@ Provide a helpful, analytical answer. Use markdown for formatting. If the answer
     }
 };
 
+const getProjectUserJourneysController = async (req, res) => {
+    try {
+        const { projectId } = req.params;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 5; // Clean & high-speed defaults
+        const skip = (page - 1) * limit;
+
+        const project = await Project.findOne({ _id: projectId, userId: req.user.id });
+        if (!project) return res.status(404).json({ success: false, message: "Project not found" });
+
+        // Get total count of unique users
+        const totalResult = await Event.aggregate([
+            { $match: { projectId: project._id } },
+            {
+                $group: {
+                    _id: { $ifNull: ["$userId", "$anonymousId"] }
+                }
+            },
+            { $count: "count" }
+        ]);
+        const total = totalResult[0]?.count || 0;
+
+        // Get paginated unique users sorted by lastActive descending
+        const uniqueUsers = await Event.aggregate([
+            { $match: { projectId: project._id } },
+            {
+                $group: {
+                    _id: { $ifNull: ["$userId", "$anonymousId"] },
+                    lastActive: { $max: "$timestamp" }
+                }
+            },
+            { $sort: { lastActive: -1 } },
+            { $skip: skip },
+            { $limit: limit }
+        ]);
+
+        const userKeys = uniqueUsers.map(u => u._id).filter(id => id !== null);
+
+        if (userKeys.length === 0) {
+            return res.status(200).json({
+                success: true,
+                journeys: [],
+                total,
+                page,
+                totalPages: Math.ceil(total / limit)
+            });
+        }
+
+        // Retrieve all events for ONLY these paginated users, sorted chronologically ascending
+        const events = await Event.find({
+            projectId: project._id,
+            $or: [
+                { userId: { $in: userKeys } },
+                { anonymousId: { $in: userKeys } }
+            ]
+        }).sort({ timestamp: 1 });
+
+        // Group events by userId or anonymousId
+        const userGroups = {};
+        events.forEach(evt => {
+            const userKey = evt.userId || evt.anonymousId || "Anonymous Guest";
+            if (!userGroups[userKey]) {
+                userGroups[userKey] = {
+                    userId: userKey,
+                    deviceType: evt.device?.deviceType || "Desktop",
+                    os: evt.device?.os || "Unknown OS",
+                    country: evt.location?.country || "Direct",
+                    city: evt.location?.city || "",
+                    events: [],
+                    rageClicks: 0,
+                    lastActive: evt.timestamp
+                };
+            }
+            userGroups[userKey].events.push(evt);
+            userGroups[userKey].lastActive = evt.timestamp;
+        });
+
+        // Compute frustration (rage clicks) and session duration
+        const journeys = Object.values(userGroups).map(group => {
+            let rageClicks = 0;
+            const sortedEvents = group.events;
+            for (let i = 0; i < sortedEvents.length - 2; i++) {
+                const diff1 = new Date(sortedEvents[i + 1].timestamp || 0).getTime() - new Date(sortedEvents[i].timestamp || 0).getTime();
+                const diff2 = new Date(sortedEvents[i + 2].timestamp || 0).getTime() - new Date(sortedEvents[i + 1].timestamp || 0).getTime();
+                if (
+                    sortedEvents[i].eventName === sortedEvents[i + 1].eventName &&
+                    sortedEvents[i + 1].eventName === sortedEvents[i + 2].eventName &&
+                    diff1 < 2500 && diff2 < 2500
+                ) {
+                    rageClicks++;
+                    i += 2; // skip group
+                }
+            }
+            group.rageClicks = rageClicks;
+
+            // Calculate duration in milliseconds
+            const firstTime = new Date(sortedEvents[0].timestamp).getTime();
+            const lastTime = new Date(sortedEvents[sortedEvents.length - 1].timestamp).getTime();
+            group.sessionDurationMs = lastTime - firstTime;
+
+            return group;
+        });
+
+        // Sort journeys by their most recent active timestamp descending
+        journeys.sort((a, b) => new Date(b.lastActive).getTime() - new Date(a.lastActive).getTime());
+
+        return res.status(200).json({
+            success: true,
+            journeys,
+            total,
+            page,
+            totalPages: Math.ceil(total / limit)
+        });
+    } catch (error) {
+        console.error("Error fetching user journeys:", error);
+        return res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
+
 module.exports = {
     trackEventController,
     getProjectLogsController,
     getProjectAnalyticsController,
-    getProjectAiChatController
+    getProjectAiChatController,
+    getProjectUserJourneysController
 };
+
