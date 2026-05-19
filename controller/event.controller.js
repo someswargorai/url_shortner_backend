@@ -359,7 +359,31 @@ const getProjectAnalyticsController = async (req, res) => {
         if (!project) return res.status(404).json({ success: false, message: "Project not found" });
 
         const totalEvents = await Event.countDocuments({ projectId });
-        
+
+        // Calculate today's events and event growth compared to yesterday
+        const startOfToday = new Date();
+        startOfToday.setUTCHours(0, 0, 0, 0);
+
+        const startOfYesterday = new Date(startOfToday);
+        startOfYesterday.setUTCDate(startOfYesterday.getUTCDate() - 1);
+
+        const todayEvents = await Event.countDocuments({
+            projectId,
+            timestamp: { $gte: startOfToday }
+        });
+
+        const yesterdayEvents = await Event.countDocuments({
+            projectId,
+            timestamp: { $gte: startOfYesterday, $lt: startOfToday }
+        });
+
+        let eventGrowth = 0;
+        if (yesterdayEvents > 0) {
+            eventGrowth = Math.round(((todayEvents - yesterdayEvents) / yesterdayEvents) * 100);
+        } else if (todayEvents > 0) {
+            eventGrowth = 100;
+        }
+
         // Aggregate by eventName
         const topEvents = await Event.aggregate([
             { $match: { projectId: project._id } },
@@ -399,15 +423,160 @@ const getProjectAnalyticsController = async (req, res) => {
             { $sort: { count: -1 } }
         ]);
 
+        // Aggregate Active Users
+        const sessionsDataAgg = await Event.aggregate([
+            { $match: { projectId: project._id } },
+            { $group: { _id: { $ifNull: ["$userId", "$anonymousId"] }, count: { $sum: 1 } } }
+        ]);
+        
+        const activeUsers = sessionsDataAgg.length;
+
+        // Today's Active Users
+        const todaySessionsAgg = await Event.aggregate([
+            { $match: { projectId: project._id, timestamp: { $gte: startOfToday } } },
+            { $group: { _id: { $ifNull: ["$userId", "$anonymousId"] } } }
+        ]);
+        const todayActiveUsers = todaySessionsAgg.length;
+
+        // Yesterday's Active Users
+        const yesterdaySessionsAgg = await Event.aggregate([
+            { $match: { projectId: project._id, timestamp: { $gte: startOfYesterday, $lt: startOfToday } } },
+            { $group: { _id: { $ifNull: ["$userId", "$anonymousId"] } } }
+        ]);
+        const yesterdayActiveUsers = yesterdaySessionsAgg.length;
+
+        let activeUsersGrowth = 0;
+        if (yesterdayActiveUsers > 0) {
+            activeUsersGrowth = Math.round(((todayActiveUsers - yesterdayActiveUsers) / yesterdayActiveUsers) * 100);
+        } else if (todayActiveUsers > 0) {
+            activeUsersGrowth = 100;
+        }
+        
+        // Compute Engagement Metrics
+        const totalSessions = activeUsers || 1;
+        const avgDepth = (totalEvents / totalSessions).toFixed(1);
+        const activeMultiEventSessions = sessionsDataAgg.filter(s => s.count > 1).length;
+        const engagementRate = activeUsers > 0 
+            ? Math.round((activeMultiEventSessions / activeUsers) * 100) + "%" 
+            : "0%";
+        const engagementMetrics = { engagementRate, avgDepth };
+
+        // Aggregate Active Paths
+        const activePaths = await Event.aggregate([
+            { $match: { projectId: project._id } },
+            { 
+                $group: { 
+                    _id: { $ifNull: ["$metadata.path", { $ifNull: ["$metadata.url", { $concat: ["/", "$eventName"] }] }] },
+                    count: { $sum: 1 } 
+                } 
+            },
+            { $sort: { count: -1 } },
+            { $limit: 3 },
+            { $project: { path: "$_id", count: 1, _id: 0 } }
+        ]);
+
+        // Aggregate Revenue & Campaign Attribution
+        const revenueAggregation = await Event.aggregate([
+            { $match: { projectId: project._id } },
+            {
+                $group: {
+                    _id: { 
+                        $cond: [
+                            { $and: [{ $ne: ["$source.referrer", null] }, { $ne: ["$source.referrer", "Direct"] }] },
+                            "$source.referrer",
+                            { $ifNull: ["$metadata.utm_source", { $ifNull: ["$metadata.source", { $ifNull: ["$metadata.referrer", { $ifNull: ["$source.referrer", "Direct / Organic"] }] }] }] }
+                        ]
+                    },
+                    count: { $sum: 1 },
+                    revenue: {
+                        $sum: {
+                            $convert: {
+                                input: {
+                                    $ifNull: [
+                                        "$metadata.amount",
+                                        { $ifNull: ["$metadata.price", { $ifNull: ["$metadata.revenue", { $ifNull: ["$metadata.value", 0] }] }] }
+                                    ]
+                                },
+                                to: "double",
+                                onError: 0,
+                                onNull: 0
+                            }
+                        }
+                    }
+                }
+            },
+            { $sort: { count: -1 } }
+        ]);
+
+        let totalRevenue = 0;
+        const campaignAttribution = revenueAggregation.map(item => {
+            totalRevenue += (item.revenue || 0);
+            return {
+                source: item._id,
+                count: item.count,
+                revenue: item.revenue > 0 ? `$${item.revenue.toLocaleString()}` : "$0",
+                conversion: totalEvents > 0 ? ((item.count / totalEvents) * 100).toFixed(1) + "%" : "0.0%"
+            };
+        });
+        const revenueData = { totalRevenue, campaignAttribution };
+
+        // Process Vertical Funnel Analysis
+        let funnelAnalysis = [];
+        if (topEvents && topEvents.length > 0) {
+            funnelAnalysis = await Promise.all(topEvents.slice(0, 6).map(async (evt, idx, arr) => {
+                let conversionRate = "100%";
+                if (idx > 0 && arr[idx - 1].count > 0) {
+                    conversionRate = Math.round((evt.count / arr[idx - 1].count) * 100) + "%";
+                }
+
+                // Query today's and yesterday's count for this specific event
+                const todayCount = await Event.countDocuments({
+                    projectId: project._id,
+                    eventName: evt._id,
+                    timestamp: { $gte: startOfToday }
+                });
+
+                const yesterdayCount = await Event.countDocuments({
+                    projectId: project._id,
+                    eventName: evt._id,
+                    timestamp: { $gte: startOfYesterday, $lt: startOfToday }
+                });
+
+                let growth = 0;
+                if (yesterdayCount > 0) {
+                    growth = Math.round(((todayCount - yesterdayCount) / yesterdayCount) * 100);
+                } else if (todayCount > 0) {
+                    growth = 100;
+                }
+
+                return {
+                    name: evt._id,
+                    count: evt.count,
+                    todayCount,
+                    growth,
+                    conversionFromPrevious: conversionRate
+                };
+            }));
+        }
+
         return res.status(200).json({
             success: true,
             analytics: {
                 totalEvents,
+                todayEvents,
+                eventGrowth,
                 topEvents,
                 countries,
                 os,
                 cities,
-                devices
+                devices,
+                activeUsers,
+                todayActiveUsers,
+                activeUsersGrowth,
+                activePaths,
+                engagementMetrics,
+                revenueData,
+                funnelAnalysis
             }
         });
     } catch (error) {
