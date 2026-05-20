@@ -282,31 +282,31 @@ const { generateWeeklyReportHtml } = require("./utils/weeklyReportEmail.utils");
 cron.schedule("0 9 * * 0", async () => {
   try {
     console.log("[Cron] Starting weekly analytics report generation...");
-
-    // Find all projects
-    const projects = await Project.find({}).populate("userId");
-
-    for (const project of projects) {
-      if (!project.userId || !project.userId.email) continue;
-
+    
+    const users = await User.find({});
+    
+    for (const user of users) {
+      if (!user.email) continue;
+      
       try {
-        const analytics = await getProjectAnalyticsData(project);
-        const htmlContent = generateWeeklyReportHtml(project, analytics);
-
+        const latestProject = await Project.findOne({ userId: user._id }).sort({ createdAt: -1 });
+        
+        if (!latestProject) continue;
+        
+        const analytics = await getProjectAnalyticsData(latestProject);
+        const htmlContent = generateWeeklyReportHtml(latestProject, analytics);
+        
         await mailSender(
-          project.userId.email,
-          `Weekly Analytics Report - ${project.name}`,
+          user.email,
+          `Weekly Analytics Report - ${latestProject.name}`,
           "Your weekly report is here.",
-          htmlContent,
+          htmlContent
         );
       } catch (err) {
-        console.error(
-          `[Cron] Error generating report for project ${project._id}:`,
-          err,
-        );
+        console.error(`[Cron] Error generating report for user ${user._id}:`, err);
       }
     }
-
+    
     console.log("[Cron] Finished sending weekly analytics reports.");
   } catch (error) {
     console.error("[Cron] Error in weekly analytics cron job:", error);
