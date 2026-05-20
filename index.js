@@ -12,6 +12,7 @@ const shortUrlSdkRouter = require("./route/shortUrlSdkRouter");
 const { userAuthforGetUrl } = require("./middleware/userAuthforGetUrl.middleware");
 const UAParser = require("ua-parser-js");
 const axios = require("axios");
+const cron = require("node-cron");
 
 app.use(express.json());
 
@@ -271,6 +272,46 @@ app.use("/campaign", campaignRouter);
 app.use("/project", projectRouter);
 app.use("/event", eventRouter);
 app.use("/domain", domainRouter);
+
+const Project = require("./model/project.schema");
+const User = require("./model/user.schema");
+const mailSender = require("./utils/mailSender.utils");
+const { getProjectAnalyticsData } = require("./utils/analyticsData.utils");
+const { generateWeeklyReportHtml } = require("./utils/weeklyReportEmail.utils");
+
+cron.schedule("0 9 * * 0", async () => {
+  try {
+    console.log("[Cron] Starting weekly analytics report generation...");
+
+    // Find all projects
+    const projects = await Project.find({}).populate("userId");
+
+    for (const project of projects) {
+      if (!project.userId || !project.userId.email) continue;
+
+      try {
+        const analytics = await getProjectAnalyticsData(project);
+        const htmlContent = generateWeeklyReportHtml(project, analytics);
+
+        await mailSender(
+          project.userId.email,
+          `Weekly Analytics Report - ${project.name}`,
+          "Your weekly report is here.",
+          htmlContent,
+        );
+      } catch (err) {
+        console.error(
+          `[Cron] Error generating report for project ${project._id}:`,
+          err,
+        );
+      }
+    }
+
+    console.log("[Cron] Finished sending weekly analytics reports.");
+  } catch (error) {
+    console.error("[Cron] Error in weekly analytics cron job:", error);
+  }
+});
 
 app.listen(3001, () => {
   console.log("URL shortner is listening on 3001 port");
