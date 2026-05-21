@@ -1,3 +1,4 @@
+const eventSchema = require("../model/event.schema");
 const Event = require("../model/event.schema");
 
 async function getProjectAnalyticsData(project) {
@@ -103,8 +104,7 @@ async function getProjectAnalyticsData(project) {
   let activeUsersGrowth = 0;
   if (yesterdayActiveUsers > 0) {
     activeUsersGrowth = Math.round(
-      ((todayActiveUsers - yesterdayActiveUsers) / yesterdayActiveUsers) *
-        100,
+      ((todayActiveUsers - yesterdayActiveUsers) / yesterdayActiveUsers) * 100,
     );
   } else if (todayActiveUsers > 0) {
     activeUsersGrowth = 100;
@@ -113,7 +113,8 @@ async function getProjectAnalyticsData(project) {
   // Compute Engagement Metrics
   const totalSessions = activeUsers || 1;
   const avgDepth = (totalEvents / totalSessions).toFixed(1);
-  const activeMultiEventSessions = sessionsDataAgg.filter((s) => s.count > 1).length;
+  const activeMultiEventSessions = sessionsDataAgg.filter((s) => s.count > 1)
+    .length;
   const engagementRate =
     activeUsers > 0
       ? Math.round((activeMultiEventSessions / activeUsers) * 100) + "%"
@@ -569,6 +570,52 @@ async function getProjectAnalyticsData(project) {
     thirtyDayRetentionRate: 0,
   };
 
+  const peakTrafficOnDateAndHour = await eventSchema.aggregate([
+    {
+      $group: {
+        _id: {
+          date: {
+            $dateToString: {
+              format: "%Y-%m-%d",
+              date: "$createdAt",
+            },
+          },
+          hour: {
+            $hour: "$createdAt",
+          },
+        },
+        count: {
+          $sum: 1,
+        },
+      },
+    },
+
+    {
+      $sort: {
+        "_id.date": 1,
+        count: -1,
+      },
+    },
+
+    {
+      $group: {
+        _id: "$_id.date",
+        peakHour: {
+          $first: "$_id.hour",
+        },
+        peakTraffic: {
+          $first: "$count",
+        },
+      },
+    },
+
+    {
+      $sort: {
+        _id: 1,
+      },
+    },
+  ]);
+
   return {
     totalEvents,
     todayEvents,
@@ -594,6 +641,7 @@ async function getProjectAnalyticsData(project) {
     activeUsersTimelineMonth,
     activeUsersTimelineYear,
     retentionData,
+    peakTrafficOnDateAndHour,
   };
 }
 
