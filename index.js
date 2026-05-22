@@ -13,6 +13,7 @@ const { userAuthforGetUrl } = require("./middleware/userAuthforGetUrl.middleware
 const UAParser = require("ua-parser-js");
 const axios = require("axios");
 const cron = require("node-cron");
+const webhookRouter = require("./route/webhook.router")
 
 app.use(express.json());
 
@@ -22,6 +23,8 @@ app.use(
     methods: ["GET", "POST", "DELETE", "PUT", "PATCH"],
   }),
 );
+
+app.use("/webhooks", webhookRouter);
 
 redis.on("connect", () => {
   console.log("Redis connected");
