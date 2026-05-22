@@ -1,80 +1,86 @@
 const { default: subscriptionSchema } = require("../model/subscription.schema");
+const { validateEvent } = require("@polar-sh/sdk/webhooks");
 
-const webhook = async (req,res)=>{
- const body = req.body.toString()
+const webhook = async (req, res) => {
+  const body = req.body.toString();
   const headers = req.headers;
 
   let event;
   try {
-    event = validateEvent(body, headers, process.env.POLAR_WEBHOOK_SECRET)
+    event = validateEvent(body, headers, process.env.POLAR_WEBHOOK_SECRET);
   } catch {
-    return res.status(403).json({ error: "Invalid signature" })
+    return res.status(403).json({ error: "Invalid signature" });
   }
 
-  const sub = event.data
+  const sub = event.data;
 
   try {
     switch (event.type) {
-
       case "subscription.created":
         await subscriptionSchema.findOneAndUpdate(
           { email: sub.customer.email },
           {
             $set: {
-              subscriptionId:     sub.id,
+              subscriptionId: sub.id,
               subscriptionStatus: "active",
-              plan:               sub.product.name,
-              subscribedAt:       new Date(sub.createdAt),
-              polarCustomerId:    sub.customerId,
-              renewsAt:           sub.currentPeriodEnd ? new Date(sub.currentPeriodEnd) : null,
+              plan: sub.product.name,
+              subscribedAt: new Date(sub.createdAt),
+              polarCustomerId: sub.customerId,
+              renewsAt: sub.currentPeriodEnd
+                ? new Date(sub.currentPeriodEnd)
+                : null,
             },
           },
-          { upsert: true, new: true }
-        )
-        break
+          { upsert: true, new: true },
+        );
+        break;
 
       case "subscription.updated":
-        await Subscription.findOneAndUpdate(
+        await subscriptionSchema.findOneAndUpdate(
           { subscriptionId: sub.id },
           {
             $set: {
               subscriptionStatus: sub.status,
-              renewsAt:           sub.currentPeriodEnd ? new Date(sub.currentPeriodEnd) : null,
+              renewsAt: sub.currentPeriodEnd
+                ? new Date(sub.currentPeriodEnd)
+                : null,
             },
-          }
-        )
-        break
+          },
+        );
+        break;
 
       case "subscription.canceled":
-        await Subscription.findOneAndUpdate(
+        await subscriptionSchema.findOneAndUpdate(
           { subscriptionId: sub.id },
           {
             $set: {
               subscriptionStatus: "canceled",
-              expiresAt:          sub.currentPeriodEnd ? new Date(sub.currentPeriodEnd) : null,
+              expiresAt: sub.currentPeriodEnd
+                ? new Date(sub.currentPeriodEnd)
+                : null,
             },
-          }
-        )
-        break
+          },
+        );
+        break;
 
       case "subscription.revoked":
-        await Subscription.findOneAndUpdate(
+        await subscriptionSchema.findOneAndUpdate(
           { subscriptionId: sub.id },
           {
             $set: {
               subscriptionStatus: "expired",
-              expiresAt:          new Date(),
+              expiresAt: new Date(),
             },
-          }
-        )
-        break
+          },
+        );
+        break;
     }
 
-    res.status(200).json({ received: true })
+    res.status(200).json({ received: true });
   } catch (error) {
-    console.error("Webhook handler failed", error)
-    res.status(500).json({ error: "Internal error" })
+    console.error("Webhook handler failed", error);
+    res.status(500).json({ error: "Internal error" });
   }
-}
+};
 
 module.exports = webhook;

@@ -15,7 +15,7 @@ const axios = require("axios");
 const cron = require("node-cron");
 const webhookRouter = require("./route/webhook.router")
 
-app.use(express.json());
+
 
 app.use(
   cors({
@@ -25,6 +25,7 @@ app.use(
 );
 
 app.use("/webhooks", webhookRouter);
+app.use(express.json());
 
 redis.on("connect", () => {
   console.log("Redis connected");
