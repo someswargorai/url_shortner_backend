@@ -5,11 +5,14 @@ const {
     getProjectByIdController
 } = require("../controller/project.controller");
 const { userAuth } = require("../middleware/userAuth.middleware");
+const planLimiter = require("../middleware/subscritption.middleware");
+const rateLimit = require("../middleware/rateLimit.middleware");
+
 
 const router = express.Router();
 
-router.post("/", userAuth, createProjectController);
-router.get("/", userAuth, getProjectsController);
-router.get("/:projectId", userAuth, getProjectByIdController);
+router.post("/", userAuth, planLimiter("projects"), rateLimit, createProjectController);
+router.get("/", userAuth, rateLimit, getProjectsController);
+router.get("/:projectId", userAuth, rateLimit, getProjectByIdController);
 
 module.exports = router;

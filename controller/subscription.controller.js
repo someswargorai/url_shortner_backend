@@ -1,5 +1,6 @@
-const { default: subscriptionSchema } = require("../model/subscription.schema");
+
 const { Polar } = require("@polar-sh/sdk");
+const subscriptionSchema = require("../model/subscription.schema");
 
 const polar = new Polar({
   accessToken: process.env.POLAR_ACCESS_TOKEN,
@@ -17,7 +18,8 @@ const getActiveSubscription = async (req, res) => {
 
     res.status(200).json({success:true,plan: subscription});
   } catch (error) {
-    res.status(500).json({ success: false, message: "Error fetching active subscription" });
+    console.error("Error fetching active subscription:", error);
+    res.status(500).json({ success: false, message: "Error fetching active subscription", error });
   }
 };
 

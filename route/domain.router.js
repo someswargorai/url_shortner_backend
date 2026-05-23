@@ -7,10 +7,12 @@ const {
     deleteDomainController
 } = require('../controller/domain.controller');
 const { userAuth } = require('../middleware/userAuth.middleware');
+const planLimiter = require('../middleware/subscritption.middleware');
+const rateLimit = require('../middleware/rateLimit.middleware');
 
-router.get("/", userAuth, getDomainController);
-router.post("/", userAuth, createDomainController);
-router.post("/verify", userAuth, verifyDomainController);
-router.delete("/:domainId", userAuth, deleteDomainController);
+router.get("/", userAuth, rateLimit, getDomainController);
+router.post("/", userAuth, planLimiter("domains"), rateLimit, createDomainController);
+router.post("/verify", userAuth, rateLimit, verifyDomainController);
+router.delete("/:domainId", userAuth, rateLimit, deleteDomainController);
 
 module.exports = router;
