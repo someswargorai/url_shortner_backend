@@ -24,6 +24,7 @@ const webhook = async (req, res) => {
               subscriptionId: sub.id,
               subscriptionStatus: "active",
               plan: sub.product.name,
+              userId: req.user._id,
               subscribedAt: new Date(sub.createdAt),
               polarCustomerId: sub.customerId,
               renewsAt: sub.currentPeriodEnd
@@ -41,6 +42,7 @@ const webhook = async (req, res) => {
           {
             $set: {
               subscriptionStatus: sub.status,
+              plan: sub.product.name,
               renewsAt: sub.currentPeriodEnd
                 ? new Date(sub.currentPeriodEnd)
                 : null,

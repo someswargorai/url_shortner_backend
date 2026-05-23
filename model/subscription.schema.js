@@ -11,7 +11,7 @@ const subscriptionSchema = new mongoose.Schema(
       enum: ["active", "canceled", "expired"],
     },
     plan: { type: String },
-    polarCustomerId: { type: String },
+    polarCustomerId: { type: String, default: null },
     subscribedAt: { type: Date },
     renewsAt: { type: Date },
     expiresAt: { type: Date },

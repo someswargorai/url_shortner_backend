@@ -14,7 +14,7 @@ const UAParser = require("ua-parser-js");
 const axios = require("axios");
 const cron = require("node-cron");
 const webhookRouter = require("./route/webhook.router")
-
+const subscriptionRouter = require("./route/subscription.router");
 
 
 app.use(
@@ -276,6 +276,7 @@ app.use("/campaign", campaignRouter);
 app.use("/project", projectRouter);
 app.use("/event", eventRouter);
 app.use("/domain", domainRouter);
+app.use("/subscription", subscriptionRouter);
 
 const Project = require("./model/project.schema");
 const User = require("./model/user.schema");
