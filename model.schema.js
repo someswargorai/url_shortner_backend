@@ -76,6 +76,6 @@ const schema = mongoose.Schema({
   },
 });
 
-schema.index({ longUrl: 1 })
+schema.index({ longUrl: 1, userId: 1, campaignId: 1, _id: 1 }); // Compound index for faster lookups by longUrl and userId
 
 module.exports = mongoose.model("url", schema);

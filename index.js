@@ -112,38 +112,49 @@ app.get("/get-url/:shortUrl", userAuthforGetUrl, async (req, res) => {
       // Add back to redis for future requests
       await redis.set(cacheKey, url.longUrl, "EX", 86400);
 
-      // update the count of the url
-      await modelSchema.updateOne(
-          {
-            _id: url._id
-          },
-          {
+      clickBatchProcessor([{
+        urlId: url._id,
+        campaignId: url.campaignId,
+        ip: ip,
+        location: locationStr,
+        device: deviceType,
+        browser: browserName,
+        os: fullOs,
+        referrer: referrer
+      }]);
 
-            $push: {
-              userIps: ip,
-              location: locationStr,
-              devices: deviceType,
-              browsers: browserName,
-              os: fullOs,
-              referrer: referrer,
-              countGraph: {
-                  count: 1
-              },
-            }
-          }
-        )
+      // update the count of the url
+      //  await modelSchema.updateOne(
+      //     {
+      //       _id: url._id
+      //     },
+      //     {
+
+      //       $push: {
+      //         userIps: ip,
+      //         location: locationStr,
+      //         devices: deviceType,
+      //         browsers: browserName,
+      //         os: fullOs,
+      //         referrer: referrer,
+      //         countGraph: {
+      //             count: 1
+      //         },
+      //       }
+      //     }
+      //   )
         
-        const newClick = new clickSchema({
-          urlId: url._id,
-          campaignId: url.campaignId,
-          ip: ip,
-          location: locationStr,
-          device: deviceType,
-          browser: browserName,
-          os: fullOs,
-          referrer: referrer
-        });
-        await newClick.save();
+      //   const newClick = new clickSchema({
+      //     urlId: url._id,
+      //     campaignId: url.campaignId,
+      //     ip: ip,
+      //     location: locationStr,
+      //     device: deviceType,
+      //     browser: browserName,
+      //     os: fullOs,
+      //     referrer: referrer
+      //   });
+      //   await newClick.save();
 
         return res.status(301).redirect(url.longUrl)
 
@@ -165,27 +176,39 @@ app.get("/get-url/:shortUrl", userAuthforGetUrl, async (req, res) => {
       }
 
       if (url) {
-        await modelSchema.updateOne(
-          {
-            _id: url._id
-          },
-          {
+        // await modelSchema.updateOne(
+        //   {
+        //     _id: url._id
+        //   },
+        //   {
 
-            $push: {
-              userIps: ip,
-              location: locationStr,
-              devices: deviceType,
-              browsers: browserName,
-              os: fullOs,
-              referrer: referrer,
-              countGraph: {
-                count: 1
-              },
-            }
-          }
-        )
+        //     $push: {
+        //       userIps: ip,
+        //       location: locationStr,
+        //       devices: deviceType,
+        //       browsers: browserName,
+        //       os: fullOs,
+        //       referrer: referrer,
+        //       countGraph: {
+        //         count: 1
+        //       },
+        //     }
+        //   }
+        // )
         
-        const newClick = new clickSchema({
+        // const newClick = new clickSchema({
+        //   urlId: url._id,
+        //   campaignId: url.campaignId,
+        //   ip: ip,
+        //   location: locationStr,
+        //   device: deviceType,
+        //   browser: browserName,
+        //   os: fullOs,
+        //   referrer: referrer
+        // });
+        // await newClick.save();
+      clickBatchProcessor([
+        {
           urlId: url._id,
           campaignId: url.campaignId,
           ip: ip,
@@ -193,9 +216,9 @@ app.get("/get-url/:shortUrl", userAuthforGetUrl, async (req, res) => {
           device: deviceType,
           browser: browserName,
           os: fullOs,
-          referrer: referrer
-        });
-        await newClick.save();
+          referrer: referrer,
+        },
+      ]);
       }
 
       return res.status(301).redirect(isPresentOrNot)
@@ -283,6 +306,7 @@ const User = require("./model/user.schema");
 const mailSender = require("./utils/mailSender.utils");
 const { getProjectAnalyticsData } = require("./utils/analyticsData.utils");
 const { generateWeeklyReportHtml } = require("./utils/weeklyReportEmail.utils");
+const clickBatchProcessor = require("./utils/clickBatchProcessing.utils");
 
 cron.schedule("0 9 * * 0", async () => {
   try {

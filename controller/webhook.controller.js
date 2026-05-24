@@ -76,6 +76,11 @@ const webhook = async (req, res) => {
           },
         );
         break;
+
+      default:
+        // unhandled event types — just acknowledge them
+        console.log(`Unhandled event type: ${event.type}`);
+        break;
     }
 
     res.status(200).json({ received: true });

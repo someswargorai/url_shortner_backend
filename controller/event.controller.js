@@ -5,6 +5,9 @@ const axios = require("axios");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const mailSender = require("../utils/mailSender.utils");
 const { getProjectAnalyticsData } = require("../utils/analyticsData.utils");
+const eventBatchProcessor = require("../utils/eventBatchProcessing.utils");
+const redis = require("../config/redis.config");
+const mongoose = require("mongoose");
 
 // Public Endpoint for SDK to track an event
 const trackEventController = async (req, res) => {
@@ -61,28 +64,53 @@ const trackEventController = async (req, res) => {
       console.error("GeoIP lookup failed:", geoError.message);
     }
 
-    const newEvent = await Event.create({
-      projectId: project._id,
-      eventName: event,
-      notification: notification || false,
-      metadata: metadata || {},
-      userId: userId || null,
-      anonymousId: anonymousId || null,
-      device: {
-        os: osName,
-        browser: browserName,
-        deviceType: deviceType,
+    // const newEvent = await Event.create({
+    //   projectId: project._id,
+    //   eventName: event,
+    //   notification: notification || false,
+    //   metadata: metadata || {},
+    //   userId: userId || null,
+    //   anonymousId: anonymousId || null,
+    //   device: {
+    //     os: osName,
+    //     browser: browserName,
+    //     deviceType: deviceType,
+    //   },
+    //   location: {
+    //     country,
+    //     city,
+    //     region,
+    //   },
+    //   source: {
+    //     referrer,
+    //   },
+    //   ip: lookupIp,
+    // });
+
+    eventBatchProcessor([
+      {
+        projectId: project._id,
+        eventName: event,
+        notification: notification || false,
+        metadata: metadata || {},
+        userId: userId || null,
+        anonymousId: anonymousId || null,
+        device: {
+          os: osName,
+          browser: browserName,
+          deviceType: deviceType,
+        },
+        location: {
+          country,
+          city,
+          region,
+        },
+        source: {
+          referrer,
+        },
+        ip: lookupIp,
       },
-      location: {
-        country,
-        city,
-        region,
-      },
-      source: {
-        referrer,
-      },
-      ip: lookupIp,
-    });
+    ]);
 
     if (notification && project.userId?.email) {
       // Helper to format metadata to beautiful HTML-colored JSON
@@ -358,12 +386,37 @@ const trackEventController = async (req, res) => {
   }
 };
 
+// All types of logs and analytics endpoints for Dashboard (internal use only, not exposed to SDK)
+
+const getLogsTypesController = async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    console.log("projectId:", projectId);
+    const projectTypes = await Event.aggregate([
+      { $match: { projectId: new mongoose.Types.ObjectId(projectId)}},
+      {
+        $group: {
+          _id: "$eventName",
+        },
+      },
+    ]);
+
+    return res.status(200).json({ success: true, types: projectTypes.map((t) => t._id) });
+
+  } catch (err) {
+    console.log(err);
+  }
+};
+
 // Internal Endpoint for Dashboard - Get raw logs
 const getProjectLogsController = async (req, res) => {
   try {
+    const query = {};
     const { projectId } = req.params;
+    const filter = req.query.filter || "all";
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 50;
+    const search = req.query.search || "";
 
     const project = await Project.findOne({
       _id: projectId,
@@ -374,12 +427,26 @@ const getProjectLogsController = async (req, res) => {
         .status(404)
         .json({ success: false, message: "Project not found" });
 
-    const events = await Event.find({ projectId })
+    if(filter !== "all"){
+      query.eventName = filter;
+      query.projectId = projectId;
+      if(search!==""){
+        query.userId = { $regex: search, $options: "i" };
+      }
+    }else{
+      query.projectId = projectId;
+      if(search!==""){
+        query.userId = { $regex: search, $options: "i" };
+      }
+    }
+    console.log("Query for logs:", query);
+    
+    const events = await Event.find(query)
       .sort({ timestamp: -1 })
       .skip((page - 1) * limit)
       .limit(limit);
 
-    const total = await Event.countDocuments({ projectId });
+    const total = await Event.countDocuments(query);
 
     return res.status(200).json({
       success: true,
@@ -404,12 +471,23 @@ const getProjectAnalyticsController = async (req, res) => {
       _id: projectId,
       userId: req.user.id,
     });
+    const cacheKey = `${req.user.id}:analytics_${projectId}`;
+
+    if (await redis.exists(cacheKey)) {
+      const cachedData = await redis.get(cacheKey);
+      return res.status(200).json({
+        success: true,
+        analytics: JSON.parse(cachedData),
+        message: "Using Cached Analytics",
+      });
+    }
     if (!project)
       return res
         .status(404)
         .json({ success: false, message: "Project not found" });
 
     const analyticsData = await getProjectAnalyticsData(project);
+    await redis.set(cacheKey, JSON.stringify(analyticsData), "EX", 300); // Cache for 5 minutes
 
     return res.status(200).json({
       success: true,
@@ -635,4 +713,5 @@ module.exports = {
   getProjectAnalyticsController,
   getProjectAiChatController,
   getProjectUserJourneysController,
+  getLogsTypesController,
 };

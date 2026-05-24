@@ -46,4 +46,12 @@ const eventSchema = mongoose.Schema({
     }
 }, { timestamps: true });
 
+
+eventSchema.index({ projectId: 1, eventName: 1 });
+eventSchema.index({ userId : "text"},{
+    weights: {
+        userId: 5
+    }
+});
+
 module.exports = mongoose.model("event", eventSchema);
