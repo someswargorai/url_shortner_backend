@@ -21,6 +21,7 @@ const getUrlAnalyticsController = async (req, res) => {
     
     const urls = await modelSchema
       .find({ userId })
+      .populate("campaignId", "name") // Populate campaign name
       .select("seqId longUrl createdAt countGraph shortUrl")
       .sort({ createdAt: -1 }) // newest first
       .skip((page - 1) * limit)
